@@ -74,8 +74,8 @@ export default function Contact() {
                         <ValidationError prefix="Message" field="message" errors={state.errors} className="text-red-500 text-xs mt-1" />
                     </div>
                     
-                    {state.errors && state.errors.length > 0 && (
-                        <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg text-sm">
+                            {state.errors && (state.errors as any).length > 0 && (
+                            <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg text-sm">
                             <AlertCircle size={16} />
                             <span>Something went wrong. Please try again.</span>
                         </div>
