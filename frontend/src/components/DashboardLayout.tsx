@@ -20,23 +20,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient()
 
   useEffect(() => {
-   // 1. Check Auth
-const checkUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    router.push('/login')
-    return // <--- Stop execution so TypeScript knows we exit
-  }
-  setUser(user)
-  
-  // Fetch Profile
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('full_name, avatar_url')
-    .eq('id', user.id) // Now TypeScript knows user exists
-    .single()
-  setProfile(profileData)
-}
+    // 1. Check Auth
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/login')
+        return
+      }
+      setUser(user)
+      
+      // Fetch Profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', user.id)
+        .single()
+      setProfile(profileData)
+    }
     checkUser()
 
     // 2. Load Sidebar Preference
@@ -215,17 +215,16 @@ const checkUser = async () => {
       {/* MAIN CONTENT WRAPPER */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Bar (Mobile + Notifications) */}
-        <header className="md:flex h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 items-center justify-between px-4 sticky top-0 z-20">
-          <button onClick={toggleSidebar} className="md:hidden text-gray-600 dark:text-gray-300">
-            <Menu size={24}/>
-          </button>
-          
-          <div className="hidden md:block flex-1"></div>
+        <header className="md:flex h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 items-center justify-between px-4 sticky top-0 z-20 hidden">
+          {/* This header is hidden on desktop by default in the layout design, 
+              but kept for structure. Mobile header is below. */}
+        </header>
 
-          {/* Notification Bell */}
-          <button className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-            <Bell size={20} className="text-gray-600 dark:text-gray-300" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+        {/* Mobile Header (Visible only on mobile) */}
+        <header className="md:hidden h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-4">
+          <span className="font-bold text-lg">BillingEngine</span>
+          <button onClick={toggleSidebar} className="text-gray-600 dark:text-gray-300">
+            <Menu size={24}/>
           </button>
         </header>
 
