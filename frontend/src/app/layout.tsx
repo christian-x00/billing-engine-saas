@@ -3,21 +3,48 @@ import "./globals.css";
 import CrispChat from "@/components/CrispChat";
 
 export const metadata: Metadata = {
-  title: "BillingEngine | Serverless Usage-Based Billing Infrastructure",
-  description: "The complete API for metered pricing. Ingest events, aggregate usage, and generate invoices without managing servers. Built for Next.js and Supabase.",
-  keywords: ["usage based billing", "metered pricing", "saas billing", "stripe alternative", "serverless billing"],
+  metadataBase: new URL('https://billing-engine.vercel.app'), // Replace with your real URL
+  title: {
+    default: "BillingEngine | Serverless Usage-Based Billing Infrastructure",
+    template: "%s | BillingEngine"
+  },
+  description: "The complete API for metered pricing. Ingest events, aggregate usage, and generate invoices automatically. Built for Next.js, Stripe, and Supabase.",
+  keywords: ["usage based billing", "metered pricing", "saas billing", "stripe alternative", "serverless billing", "api monetization", "usage metering"],
+  authors: [{ name: "BillingEngine Team" }],
+  creator: "BillingEngine",
+  publisher: "BillingEngine Inc",
+  
   openGraph: {
-    title: "BillingEngine - Usage Based Billing",
-    description: "Scale your SaaS billing from 1 to 1B events.",
     type: "website",
-    url: "https://billing-engine.vercel.app", // Replace with your actual URL later
+    locale: "en_US",
+    url: "https://billing-engine-api.vercel.app",
+    title: "BillingEngine - Usage Based Billing Infrastructure",
+    description: "Turn API calls into revenue. Serverless metering, automatic invoicing, and real-time analytics.",
     siteName: "BillingEngine",
   },
+  
   twitter: {
     card: "summary_large_image",
-    title: "BillingEngine",
-    description: "Serverless Usage-Based Billing Infrastructure",
-  }
+    title: "BillingEngine - Serverless Billing",
+    description: "The complete infrastructure for usage-based pricing.",
+    creator: "@billingengine",
+  },
+  
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  
+  verification: {
+    // google: 'your-google-verification-code', // Add later when you setup Google Search Console
+  },
 };
 
 export default function RootLayout({
@@ -27,6 +54,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="canonical" href="https://billing-engine-api.vercel.app" />
+      </head>
       <body className="antialiased">
         <CrispChat />
         {children}
