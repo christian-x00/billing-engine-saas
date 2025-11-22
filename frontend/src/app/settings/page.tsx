@@ -52,13 +52,17 @@ export default function SettingsPage() {
       if (dbError) throw dbError
 
       toast.success('Profile updated successfully.')
+      
+      // TRIGGER SIDEBAR UPDATE
+      window.dispatchEvent(new Event('profile-updated'))
+
     } catch (error: any) {
       toast.error(error.message)
     }
     setLoading(false)
   }
 
-  // 2. Upload Avatar (Explicitly targeting 'avatars' bucket)
+  // 2. Upload Avatar
   const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       setUploading(true)
@@ -68,23 +72,21 @@ export default function SettingsPage() {
       }
 
       const file = event.target.files[0]
+      
+      if (file.size > 2097152) {
+        throw new Error('File size must be less than 2MB')
+      }
+
       const fileExt = file.name.split('.').pop()
       const fileName = `avatar-${Date.now()}.${fileExt}`
       const filePath = `${user.id}/${fileName}`
 
-      console.log("Attempting upload to 'avatars' bucket:", filePath)
-
-      // Upload to 'avatars' bucket
       const { error: uploadError } = await supabase.storage
-        .from('avatars') // <--- This MUST match the bucket name in Supabase
+        .from('avatars')
         .upload(filePath, file, { upsert: true })
 
-      if (uploadError) {
-        console.error("Upload failed:", uploadError)
-        throw uploadError
-      }
+      if (uploadError) throw uploadError
 
-      // Get public URL
       const { data } = supabase.storage
         .from('avatars')
         .getPublicUrl(filePath)
@@ -93,7 +95,6 @@ export default function SettingsPage() {
       toast.success('Avatar uploaded! Click "Save Changes" to confirm.')
       
     } catch (error: any) {
-      console.error("Full Error:", error)
       toast.error(error.message || 'Upload failed')
     } finally {
       setUploading(false)
@@ -126,7 +127,7 @@ export default function SettingsPage() {
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
                     <User size={20} className="text-indigo-600 dark:text-indigo-400" />
-                    <h2 className="font-semibold text-gray-900 dark:text-white">Public Profile (v2)</h2>
+                    <h2 className="font-semibold text-gray-900 dark:text-white">Public Profile</h2>
                 </div>
                 <form onSubmit={updateProfile} className="p-6 space-y-6">
                     

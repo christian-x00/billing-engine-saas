@@ -20,8 +20,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient()
 
   useEffect(() => {
-    // 1. Check Auth
-    const checkUser = async () => {
+    // 1. Fetch Profile Function
+    const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/login')
@@ -29,15 +29,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
       setUser(user)
       
-      // Fetch Profile
-      const { data: profileData } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('full_name, avatar_url')
         .eq('id', user.id)
         .single()
-      setProfile(profileData)
+      setProfile(data)
     }
-    checkUser()
+
+    // Initial Load
+    fetchProfile()
+
+    // Listen for updates from Settings page
+    const handleUpdate = () => fetchProfile()
+    window.addEventListener('profile-updated', handleUpdate)
 
     // 2. Load Sidebar Preference
     const savedSidebar = localStorage.getItem('sidebarState')
@@ -56,6 +61,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setIsDarkMode(false)
       document.documentElement.classList.remove('dark')
     }
+
+    return () => window.removeEventListener('profile-updated', handleUpdate)
   }, [router])
 
   const toggleSidebar = () => {
@@ -216,8 +223,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Top Bar (Mobile + Notifications) */}
         <header className="md:flex h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 items-center justify-between px-4 sticky top-0 z-20 hidden">
-          {/* This header is hidden on desktop by default in the layout design, 
-              but kept for structure. Mobile header is below. */}
+          {/* This header is hidden on desktop by default in the layout design */}
         </header>
 
         {/* Mobile Header (Visible only on mobile) */}
