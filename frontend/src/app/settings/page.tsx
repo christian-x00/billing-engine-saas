@@ -78,16 +78,16 @@ export default function SettingsPage() {
       const filePath = `avatars/${fileName}`
 
       // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('invoices') // We reuse the existing bucket
-        .upload(filePath, file, { upsert: true })
-
+const { error: uploadError } = await supabase.storage
+  .from('avatars') // <--- NEW (Correct bucket)
+  .upload(filePath, file, { upsert: true })
       if (uploadError) throw uploadError
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('invoices')
-        .getPublicUrl(filePath)
+      
+const { data: { publicUrl } } = supabase.storage
+  .from('avatars') // <--- CHANGE THIS TOO
+  .getPublicUrl(filePath)
 
       setAvatarUrl(publicUrl)
       setMsg({ type: 'success', text: 'Avatar uploaded! Click Save to confirm.' })
