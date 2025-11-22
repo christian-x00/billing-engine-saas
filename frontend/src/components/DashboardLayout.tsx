@@ -20,20 +20,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient()
 
   useEffect(() => {
-    // 1. Check Auth
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) router.push('/login')
-      setUser(user)
-      
-      // Fetch Profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_url')
-        .eq('id', user.id)
-        .single()
-      setProfile(profileData)
-    }
+   // 1. Check Auth
+const checkUser = async () => {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    router.push('/login')
+    return // <--- Stop execution so TypeScript knows we exit
+  }
+  setUser(user)
+  
+  // Fetch Profile
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('full_name, avatar_url')
+    .eq('id', user.id) // Now TypeScript knows user exists
+    .single()
+  setProfile(profileData)
+}
     checkUser()
 
     // 2. Load Sidebar Preference
