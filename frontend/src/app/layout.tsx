@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import CrispChat from "@/components/CrispChat";
+import { Toaster } from 'sonner' // <--- ADD THIS
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://billing-engine.vercel.app'), // Replace with your real URL
+  metadataBase: new URL('https://billing-engine-api.vercel.app/'),
   title: {
     default: "BillingEngine | Serverless Usage-Based Billing Infrastructure",
     template: "%s | BillingEngine"
@@ -41,10 +42,6 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
-  
-  verification: {
-    // google: 'your-google-verification-code', // Add later when you setup Google Search Console
-  },
 };
 
 export default function RootLayout({
@@ -59,6 +56,7 @@ export default function RootLayout({
         <link rel="canonical" href="https://billing-engine-api.vercel.app" />
       </head>
       <body className="antialiased">
+        <Toaster position="top-right" richColors /> {/* <--- ADD THIS */}
         <CrispChat />
         {children}
       </body>

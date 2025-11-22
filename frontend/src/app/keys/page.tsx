@@ -1,5 +1,5 @@
 'use client'
-
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -44,31 +44,43 @@ export default function ApiKeysPage() {
   const generateKey = async () => {
     if (!tenantId) return
     setLoading(true)
+    
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
+      
       const res = await fetch(`${backendUrl}/api/keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenantId })
       })
-      if (!res.ok) throw new Error('Failed')
+      
+      if (!res.ok) throw new Error('Failed to generate key')
+
       const data = await res.json()
+      
       if (data.apiKey) {
         setNewKey(data.apiKey)
         fetchData(user.id)
+        toast.success('API Key Generated Successfully!') // <--- ADD THIS
       }
     } catch (err) {
-      alert('Backend connection failed.')
+      toast.error('Failed to connect to backend. Please try again.') // <--- ADD THIS
+      console.error(err)
     }
     setLoading(false)
   }
 
-  const revokeKey = async (id: string) => {
-    if(!confirm("Are you sure? Apps using this key will stop working immediately.")) return;
-    await supabase.from('api_keys').delete().eq('id', id)
-    fetchData(user.id)
+const revokeKey = async (id: string) => {
+    if(!confirm("Are you sure? This will break any apps using this key immediately.")) return;
+    
+    const { error } = await supabase.from('api_keys').delete().eq('id', id)
+    if (error) {
+      toast.error('Error revoking key') // <--- ADD THIS
+    } else {
+      toast.success('API Key revoked') // <--- ADD THIS
+      fetchData(user.id)
+    }
   }
-
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto space-y-8">

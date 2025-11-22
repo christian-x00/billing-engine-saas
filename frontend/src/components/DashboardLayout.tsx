@@ -6,14 +6,14 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { 
   LayoutDashboard, CreditCard, Key, Settings, LogOut, 
-  Menu, Moon, Sun, ChevronLeft, ChevronRight
+  Menu, Moon, Sun, ChevronLeft, ChevronRight, Bell, User 
 } from 'lucide-react'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  // Initialize with 'true' to avoid layout shift
   const [isSidebarOpen, setSidebarOpen] = useState(true)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
   
   const pathname = usePathname()
   const router = useRouter()
@@ -25,6 +25,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) router.push('/login')
       setUser(user)
+      
+      // Fetch Profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', user.id)
+        .single()
+      setProfile(profileData)
     }
     checkUser()
 
@@ -99,8 +107,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="min-w-[32px] h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">B</div>
                 {isSidebarOpen && <span className="font-bold text-lg tracking-tight whitespace-nowrap">Engine</span>}
              </div>
-             
-             {/* Close Button (Only visible when open) */}
              {isSidebarOpen && (
                <button onClick={toggleSidebar} className="hidden md:block p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-400">
                  <ChevronLeft size={20} />
@@ -135,6 +141,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Bottom Actions */}
         <div className="p-4 border-t border-gray-100 dark:border-slate-700 space-y-2">
+            {/* User Profile Card */}
+            {isSidebarOpen && (
+              <Link href="/settings" className="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors mb-2 group">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm overflow-hidden ring-2 ring-gray-100 dark:ring-slate-600">
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    profile?.full_name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{profile?.full_name || 'User'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
+                </div>
+              </Link>
+            )}
+
+            {!isSidebarOpen && (
+              <Link href="/settings" className="flex justify-center">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm overflow-hidden">
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={20} />
+                  )}
+                </div>
+              </Link>
+            )}
+
             {/* Theme Toggle */}
             <button 
               onClick={toggleTheme}
@@ -163,12 +198,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* 
-         EXPAND BUTTON (Handle Style)
-         - Positioned absolute relative to the screen 
-         - 'left-16' (64px) puts it sticking out of the closed sidebar (w-20/80px)
-         - 'top-5' aligns it with the logo row
-      */}
+      {/* EXPAND BUTTON (When Sidebar Closed) */}
       {!isSidebarOpen && (
         <button 
             onClick={toggleSidebar}
@@ -181,11 +211,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* MAIN CONTENT WRAPPER */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Mobile Header */}
-        <header className="md:hidden h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-4">
-          <span className="font-bold text-lg">BillingEngine</span>
-          <button onClick={toggleSidebar} className="text-gray-600 dark:text-gray-300">
+        {/* Top Bar (Mobile + Notifications) */}
+        <header className="md:flex h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 items-center justify-between px-4 sticky top-0 z-20">
+          <button onClick={toggleSidebar} className="md:hidden text-gray-600 dark:text-gray-300">
             <Menu size={24}/>
+          </button>
+          
+          <div className="hidden md:block flex-1"></div>
+
+          {/* Notification Bell */}
+          <button className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+            <Bell size={20} className="text-gray-600 dark:text-gray-300" />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
           </button>
         </header>
 
