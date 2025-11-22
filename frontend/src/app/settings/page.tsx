@@ -1,9 +1,9 @@
 'use client'
-import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
-import { User, Lock, Upload, Camera, CheckCircle2 } from 'lucide-react'
+import { User, Lock, Camera, CheckCircle2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
@@ -13,7 +13,6 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState('')
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState({ type: '', text: '' })
   const supabase = createClient()
 
   useEffect(() => {
@@ -23,7 +22,6 @@ export default function SettingsPage() {
         setUser(user)
         setEmail(user.email || '')
         
-        // Fetch profile data
         const { data: profile } = await supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).single()
         if (profile) {
           setFullName(profile.full_name || '')
@@ -34,21 +32,18 @@ export default function SettingsPage() {
     init()
   }, [])
 
-  // 1. Update Profile (Name + Avatar)
+  // 1. Update Profile
   const updateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setMsg({ type: '', text: '' })
 
     try {
-      // Update Supabase Auth Email (if changed)
       if (email !== user.email) {
         const { error } = await supabase.auth.updateUser({ email: email })
         if (error) throw error
-        setMsg({ type: 'success', text: 'Confirmation email sent to new address.' })
+        toast.success('Confirmation email sent to new address.')
       }
 
-      // Update Database Profile
       const { error: dbError } = await supabase
         .from('profiles')
         .update({ full_name: fullName, avatar_url: avatarUrl })
@@ -56,73 +51,64 @@ export default function SettingsPage() {
       
       if (dbError) throw dbError
 
-      setMsg({ type: 'success', text: 'Profile updated successfully.' })
+      toast.success('Profile updated successfully.')
     } catch (error: any) {
-      setMsg({ type: 'error', text: error.message })
+      toast.error(error.message)
     }
     setLoading(false)
   }
 
-  // 2. Upload Avatar
-  
-const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
-  try {
-    setUploading(true)
+  // 2. Upload Avatar (FIXED)
+  const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploading(true)
 
-    if (!event.target.files || event.target.files.length === 0) {
-      throw new Error('You must select an image to upload.')
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('You must select an image to upload.')
+      }
+
+      const file = event.target.files[0]
+      
+      if (file.size > 2097152) {
+        throw new Error('File size must be less than 2MB')
+      }
+
+      const fileExt = file.name.split('.').pop()
+      const fileName = `avatar.${fileExt}`
+      const filePath = `${user.id}/${fileName}`
+
+      // THE FIX: Make sure it says 'avatars' here
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true })
+
+      if (uploadError) throw uploadError
+
+      // THE FIX: Make sure it says 'avatars' here too
+      const { data } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      setAvatarUrl(data.publicUrl)
+      toast.success('Avatar uploaded! Click "Save Changes" to confirm.')
+      
+    } catch (error: any) {
+      toast.error(error.message || 'Upload failed')
+    } finally {
+      setUploading(false)
     }
-
-    const file = event.target.files[0]
-    
-    // Validate file size (2MB)
-    if (file.size > 2097152) {
-      throw new Error('File size must be less than 2MB')
-    }
-
-    const fileExt = file.name.split('.').pop()
-    const fileName = `avatar-${Date.now()}.${fileExt}`
-    const filePath = `${user.id}/${fileName}`
-
-    console.log('Uploading to path:', filePath) // Debug log
-
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file, { upsert: true })
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError) // Debug log
-      throw uploadError
-    }
-
-    console.log('Upload successful:', uploadData) // Debug log
-
-    // Get public URL
-    const { data } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(filePath)
-
-    setAvatarUrl(data.publicUrl)
-    toast.success('Avatar uploaded! Click "Save Changes" to confirm.')
-    
-  } catch (error: any) {
-    console.error('Full error:', error) // Debug log
-    toast.error(error.message || 'Upload failed')
-  } finally {
-    setUploading(false)
   }
-}
 
   // 3. Update Password
   const updatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password: password })
-    if (error) setMsg({ type: 'error', text: error.message })
-    else {
-        setMsg({ type: 'success', text: 'Password updated successfully.' })
-        setPassword('')
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success('Password updated successfully.')
+      setPassword('')
     }
     setLoading(false)
   }
@@ -134,14 +120,6 @@ const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
                 <p className="text-gray-500 dark:text-gray-400">Manage your account preferences and security.</p>
             </div>
-
-            {/* Notification Banner */}
-            {msg.text && (
-                <div className={`p-4 rounded-xl flex items-center gap-3 ${msg.type === 'error' ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-900' : 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-900'}`}>
-                    {msg.type === 'success' && <CheckCircle2 size={20}/>}
-                    {msg.text}
-                </div>
-            )}
 
             {/* Profile Section */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
@@ -194,7 +172,7 @@ const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
                         </div>
                     </div>
                     <div className="flex justify-end">
-                        <button disabled={loading} className="bg-gray-900 dark:bg-indigo-600 text-white px-6 py-3 rounded-lg hover:opacity-90 disabled:opacity-50 text-sm font-bold transition-all shadow-lg">
+                        <button disabled={loading} type="submit" className="bg-gray-900 dark:bg-indigo-600 text-white px-6 py-3 rounded-lg hover:opacity-90 disabled:opacity-50 text-sm font-bold transition-all shadow-lg">
                             Save Changes
                         </button>
                     </div>
@@ -220,7 +198,7 @@ const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
                         />
                     </div>
                     <div className="flex justify-end">
-                        <button disabled={loading || !password} className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-500 disabled:opacity-50 text-sm font-bold transition-colors shadow-lg">
+                        <button disabled={loading || !password} type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-500 disabled:opacity-50 text-sm font-bold transition-colors shadow-lg">
                             Update Password
                         </button>
                     </div>
