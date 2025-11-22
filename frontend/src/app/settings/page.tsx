@@ -3,23 +3,19 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 import { 
-  User, Lock, Camera, Bell, CreditCard, CheckCircle2, Plus 
+  User, Lock, Camera, Bell, CreditCard, CheckCircle2
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
-  // Profile State
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   
-  // Loading States
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
-  
-  // Subscription State
   const [planStatus, setPlanStatus] = useState('free')
 
   // Toggles
@@ -35,7 +31,6 @@ export default function SettingsPage() {
         setUser(user)
         setEmail(user.email || '')
         
-        // Fetch Profile & Subscription Status
         const { data: profile } = await supabase
             .from('profiles')
             .select('full_name, avatar_url, tenant_id')
@@ -46,7 +41,6 @@ export default function SettingsPage() {
           setFullName(profile.full_name || '')
           setAvatarUrl(profile.avatar_url || '')
           
-          // Fetch Tenant Status
           const { data: tenant } = await supabase
             .from('tenants')
             .select('subscription_status')
@@ -60,67 +54,52 @@ export default function SettingsPage() {
     init()
   }, [])
 
-  // --- ACTION: UPDATE PROFILE ---
   const updateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-
     try {
       if (email !== user.email) {
         const { error } = await supabase.auth.updateUser({ email: email })
         if (error) throw error
         toast.success('Confirmation email sent to new address.')
       }
-
       const { error: dbError } = await supabase
         .from('profiles')
         .update({ full_name: fullName, avatar_url: avatarUrl })
         .eq('id', user.id)
       
       if (dbError) throw dbError
-
       toast.success('Profile updated successfully.')
-      window.dispatchEvent(new Event('profile-updated')) // Update sidebar
+      window.dispatchEvent(new Event('profile-updated'))
     } catch (error: any) {
       toast.error(error.message)
     }
     setLoading(false)
   }
 
-  // --- ACTION: UPLOAD AVATAR ---
   const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       setUploading(true)
-
       if (!event.target.files || event.target.files.length === 0) {
         throw new Error('You must select an image to upload.')
       }
-
       const file = event.target.files[0]
-      
       if (file.size > 2097152) {
         throw new Error('File size must be less than 2MB')
       }
-
       const fileExt = file.name.split('.').pop()
       const fileName = `avatar-${Date.now()}.${fileExt}`
       const filePath = `${user.id}/${fileName}`
 
-      // Upload to 'avatars' bucket
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, { upsert: true })
 
       if (uploadError) throw uploadError
 
-      // Get public URL
-      const { data } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath)
-
+      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
       setAvatarUrl(data.publicUrl)
       toast.success('Avatar uploaded! Click "Save Changes" to confirm.')
-      
     } catch (error: any) {
       toast.error(error.message || 'Upload failed')
     } finally {
@@ -128,36 +107,36 @@ export default function SettingsPage() {
     }
   }
 
-  // --- ACTION: UPDATE PASSWORD ---
   const updatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password: password })
-    if (error) {
-      toast.error(error.message)
-    } else {
+    if (error) toast.error(error.message)
+    else {
       toast.success('Password updated successfully.')
       setPassword('')
     }
     setLoading(false)
   }
 
-  // --- ACTION: UPGRADE SUBSCRIPTION (PAYFAST) ---
   const handleUpgrade = async (planName: string, amount: number) => {
     setLoading(true)
     try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
         
-        // Get tenant ID again to be safe
         const { data: profile } = await supabase.from('profiles').select('tenant_id, email').eq('id', user.id).single()
         
-        // Call backend to get PayFast URL
+        // FIX: Add null check
+        if (!profile) {
+            throw new Error('Profile not found')
+        }
+        
         const res = await fetch(`${backendUrl}/api/payments/subscribe`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 tenantId: profile.tenant_id,
-                email: profile.email,
+                email: profile.email, // No longer possibly null
                 amount: amount,
                 planName: planName
             })
@@ -167,7 +146,6 @@ export default function SettingsPage() {
 
         const data = await res.json()
         if(data.url) {
-            // Redirect to PayFast
             window.location.href = data.url
         }
     } catch(err: any) {
@@ -211,44 +189,29 @@ export default function SettingsPage() {
                             {uploading && <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">Uploading...</p>}
                         </div>
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
-                            <input 
-                                type="text" 
-                                value={fullName}
-                                onChange={e => setFullName(e.target.value)}
-                                className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-colors"
-                            />
+                            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-colors" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
-                            <input 
-                                type="email" 
-                                value={email}
-                                onChange={e => setEmail(e.target.value)}
-                                className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-colors"
-                            />
+                            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-colors" />
                         </div>
                     </div>
                     <div className="flex justify-end">
-                        <button disabled={loading} type="submit" className="bg-gray-900 dark:bg-indigo-600 text-white px-6 py-3 rounded-lg hover:opacity-90 disabled:opacity-50 text-sm font-bold transition-all shadow-lg">
-                            Save Changes
-                        </button>
+                        <button disabled={loading} type="submit" className="bg-gray-900 dark:bg-indigo-600 text-white px-6 py-3 rounded-lg hover:opacity-90 disabled:opacity-50 text-sm font-bold transition-all shadow-lg">Save Changes</button>
                     </div>
                 </form>
             </div>
 
-            {/* 2. SUBSCRIPTION PLAN (PAYFAST) */}
+            {/* 2. SUBSCRIPTION PLAN */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
                     <CreditCard size={20} className="text-indigo-600 dark:text-indigo-400" />
                     <h2 className="font-semibold text-gray-900 dark:text-white">Subscription Plan</h2>
                 </div>
                 <div className="p-6 space-y-6">
-                    
-                    {/* Current Status */}
                     <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50 dark:bg-slate-900/50">
                         <div>
                             <p className="font-bold text-gray-900 dark:text-white capitalize">Current Plan: {planStatus}</p>
@@ -258,8 +221,6 @@ export default function SettingsPage() {
                             {planStatus}
                         </span>
                     </div>
-                    
-                    {/* Pricing Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <button 
                             onClick={() => handleUpgrade('Startup', 499)}
@@ -277,7 +238,6 @@ export default function SettingsPage() {
                                 <li className="text-xs text-gray-500 flex items-center gap-2"><CheckCircle2 size={12} className="text-green-500"/> Priority Support</li>
                             </ul>
                         </button>
-                        
                         <button 
                             onClick={() => handleUpgrade('Enterprise', 1999)}
                             disabled={loading}
