@@ -1,4 +1,5 @@
 'use client'
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
@@ -63,40 +64,55 @@ export default function SettingsPage() {
   }
 
   // 2. Upload Avatar
-  const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-      setUploading(true)
-      setMsg({ type: '', text: '' })
+  
+const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  try {
+    setUploading(true)
 
-      if (!event.target.files || event.target.files.length === 0) {
-        throw new Error('You must select an image to upload.')
-      }
-
-      const file = event.target.files[0]
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`
-      const filePath = `avatars/${fileName}`
-
-      // Upload to Supabase Storage
-const { error: uploadError } = await supabase.storage
-  .from('avatars') // <--- NEW (Correct bucket)
-  .upload(filePath, file, { upsert: true })
-      if (uploadError) throw uploadError
-
-      // Get public URL
-      
-const { data: { publicUrl } } = supabase.storage
-  .from('avatars') // <--- CHANGE THIS TOO
-  .getPublicUrl(filePath)
-
-      setAvatarUrl(publicUrl)
-      setMsg({ type: 'success', text: 'Avatar uploaded! Click Save to confirm.' })
-    } catch (error: any) {
-      setMsg({ type: 'error', text: error.message })
-    } finally {
-      setUploading(false)
+    if (!event.target.files || event.target.files.length === 0) {
+      throw new Error('You must select an image to upload.')
     }
+
+    const file = event.target.files[0]
+    
+    // Validate file size (2MB)
+    if (file.size > 2097152) {
+      throw new Error('File size must be less than 2MB')
+    }
+
+    const fileExt = file.name.split('.').pop()
+    const fileName = `avatar-${Date.now()}.${fileExt}`
+    const filePath = `${user.id}/${fileName}`
+
+    console.log('Uploading to path:', filePath) // Debug log
+
+    // Upload to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, file, { upsert: true })
+
+    if (uploadError) {
+      console.error('Upload error:', uploadError) // Debug log
+      throw uploadError
+    }
+
+    console.log('Upload successful:', uploadData) // Debug log
+
+    // Get public URL
+    const { data } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(filePath)
+
+    setAvatarUrl(data.publicUrl)
+    toast.success('Avatar uploaded! Click "Save Changes" to confirm.')
+    
+  } catch (error: any) {
+    console.error('Full error:', error) // Debug log
+    toast.error(error.message || 'Upload failed')
+  } finally {
+    setUploading(false)
   }
+}
 
   // 3. Update Password
   const updatePassword = async (e: React.FormEvent) => {
