@@ -3,28 +3,28 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
 import { 
-  User, Lock, Camera, CheckCircle2, Bell, CreditCard, Users, Webhook, Plus, Trash2 
+  User, Lock, Camera, Bell, CreditCard, CheckCircle2, Plus 
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
+  // Profile State
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
+  
+  // Loading States
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   
-  // --- NEW STATES ---
+  // Subscription State
+  const [planStatus, setPlanStatus] = useState('free')
+
+  // Toggles
   const [notifyInvoices, setNotifyInvoices] = useState(true)
-  const [notifyMarketing, setNotifyMarketing] = useState(false)
   const [notifySecurity, setNotifySecurity] = useState(true)
-  const [webhookUrl, setWebhookUrl] = useState('https://api.yoursite.com/webhooks')
-  const [teamMembers, setTeamMembers] = useState([
-    { id: 1, email: 'admin@company.com', role: 'Owner' },
-    { id: 2, email: 'dev@company.com', role: 'Developer' }
-  ])
 
   const supabase = createClient()
 
@@ -35,88 +35,153 @@ export default function SettingsPage() {
         setUser(user)
         setEmail(user.email || '')
         
-        const { data: profile } = await supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).single()
+        // Fetch Profile & Subscription Status
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, avatar_url, tenant_id')
+            .eq('id', user.id)
+            .single()
+            
         if (profile) {
           setFullName(profile.full_name || '')
           setAvatarUrl(profile.avatar_url || '')
+          
+          // Fetch Tenant Status
+          const { data: tenant } = await supabase
+            .from('tenants')
+            .select('subscription_status')
+            .eq('id', profile.tenant_id)
+            .single()
+            
+          if (tenant) setPlanStatus(tenant.subscription_status || 'free')
         }
       }
     }
     init()
   }, [])
 
-  // --- ACTIONS ---
-
+  // --- ACTION: UPDATE PROFILE ---
   const updateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+
     try {
       if (email !== user.email) {
         const { error } = await supabase.auth.updateUser({ email: email })
         if (error) throw error
-        toast.success('Confirmation email sent.')
+        toast.success('Confirmation email sent to new address.')
       }
-      const { error: dbError } = await supabase.from('profiles').update({ full_name: fullName, avatar_url: avatarUrl }).eq('id', user.id)
+
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ full_name: fullName, avatar_url: avatarUrl })
+        .eq('id', user.id)
+      
       if (dbError) throw dbError
-      toast.success('Profile updated.')
-      window.dispatchEvent(new Event('profile-updated'))
+
+      toast.success('Profile updated successfully.')
+      window.dispatchEvent(new Event('profile-updated')) // Update sidebar
     } catch (error: any) {
       toast.error(error.message)
     }
     setLoading(false)
   }
 
+  // --- ACTION: UPLOAD AVATAR ---
   const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       setUploading(true)
-      if (!event.target.files || event.target.files.length === 0) throw new Error('Select an image.')
+
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('You must select an image to upload.')
+      }
+
       const file = event.target.files[0]
-      if (file.size > 2097152) throw new Error('Max 2MB.')
       
+      if (file.size > 2097152) {
+        throw new Error('File size must be less than 2MB')
+      }
+
       const fileExt = file.name.split('.').pop()
       const fileName = `avatar-${Date.now()}.${fileExt}`
       const filePath = `${user.id}/${fileName}`
 
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file, { upsert: true })
+      // Upload to 'avatars' bucket
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true })
+
       if (uploadError) throw uploadError
 
-      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
+      // Get public URL
+      const { data } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
       setAvatarUrl(data.publicUrl)
-      toast.success('Avatar uploaded! Save changes.')
+      toast.success('Avatar uploaded! Click "Save Changes" to confirm.')
+      
     } catch (error: any) {
-      toast.error(error.message)
+      toast.error(error.message || 'Upload failed')
     } finally {
       setUploading(false)
     }
   }
 
+  // --- ACTION: UPDATE PASSWORD ---
   const updatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password: password })
-    if (error) toast.error(error.message)
-    else {
-        toast.success('Password updated.')
-        setPassword('')
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success('Password updated successfully.')
+      setPassword('')
     }
     setLoading(false)
   }
 
-  // Simulated Actions
-  const saveNotifications = () => toast.success('Notification preferences saved.')
-  const saveWebhook = () => toast.success('Webhook URL updated.')
-  const addTeamMember = () => toast.info('Invite feature coming soon.')
-  const removeMember = (id: number) => {
-      setTeamMembers(teamMembers.filter(m => m.id !== id))
-      toast.success('Member removed.')
+  // --- ACTION: UPGRADE SUBSCRIPTION (PAYFAST) ---
+  const handleUpgrade = async (planName: string, amount: number) => {
+    setLoading(true)
+    try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
+        
+        // Get tenant ID again to be safe
+        const { data: profile } = await supabase.from('profiles').select('tenant_id, email').eq('id', user.id).single()
+        
+        // Call backend to get PayFast URL
+        const res = await fetch(`${backendUrl}/api/payments/subscribe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tenantId: profile.tenant_id,
+                email: profile.email,
+                amount: amount,
+                planName: planName
+            })
+        })
+        
+        if (!res.ok) throw new Error('Payment initialization failed')
+
+        const data = await res.json()
+        if(data.url) {
+            // Redirect to PayFast
+            window.location.href = data.url
+        }
+    } catch(err: any) {
+        toast.error(err.message || 'Payment failed')
+    }
+    setLoading(false)
   }
 
   return (
     <DashboardLayout>
-        <div className="max-w-4xl mx-auto space-y-8 pb-20">
+        <div className="max-w-3xl mx-auto space-y-8 pb-20">
             <div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
-                <p className="text-gray-500 dark:text-gray-400">Manage your workspace, team, and preferences.</p>
+                <p className="text-gray-500 dark:text-gray-400">Manage your account, billing, and preferences.</p>
             </div>
 
             {/* 1. PUBLIC PROFILE */}
@@ -129,7 +194,11 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-6">
                         <div className="relative group">
                             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold overflow-hidden border-4 border-white dark:border-slate-800 shadow-lg">
-                                {avatarUrl ? <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : fullName?.charAt(0)?.toUpperCase() || 'U'}
+                                {avatarUrl ? (
+                                    <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                                ) : (
+                                    fullName?.charAt(0)?.toUpperCase() || 'U'
+                                )}
                             </div>
                             <label className="absolute bottom-0 right-0 bg-indigo-600 p-2 rounded-full cursor-pointer hover:bg-indigo-500 transition-colors shadow-lg">
                                 <Camera size={16} className="text-white"/>
@@ -142,23 +211,93 @@ export default function SettingsPage() {
                             {uploading && <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">Uploading...</p>}
                         </div>
                     </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
-                            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-colors" />
+                            <input 
+                                type="text" 
+                                value={fullName}
+                                onChange={e => setFullName(e.target.value)}
+                                className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-colors"
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
-                            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-colors" />
+                            <input 
+                                type="email" 
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-colors"
+                            />
                         </div>
                     </div>
                     <div className="flex justify-end">
-                        <button disabled={loading} type="submit" className="bg-gray-900 dark:bg-indigo-600 text-white px-6 py-3 rounded-lg hover:opacity-90 disabled:opacity-50 text-sm font-bold transition-all shadow-lg">Save Changes</button>
+                        <button disabled={loading} type="submit" className="bg-gray-900 dark:bg-indigo-600 text-white px-6 py-3 rounded-lg hover:opacity-90 disabled:opacity-50 text-sm font-bold transition-all shadow-lg">
+                            Save Changes
+                        </button>
                     </div>
                 </form>
             </div>
 
-            {/* 2. NOTIFICATIONS */}
+            {/* 2. SUBSCRIPTION PLAN (PAYFAST) */}
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
+                    <CreditCard size={20} className="text-indigo-600 dark:text-indigo-400" />
+                    <h2 className="font-semibold text-gray-900 dark:text-white">Subscription Plan</h2>
+                </div>
+                <div className="p-6 space-y-6">
+                    
+                    {/* Current Status */}
+                    <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50 dark:bg-slate-900/50">
+                        <div>
+                            <p className="font-bold text-gray-900 dark:text-white capitalize">Current Plan: {planStatus}</p>
+                            <p className="text-xs text-gray-500">{planStatus === 'active' ? 'You are on a paid plan.' : 'Limited to 10k events.'}</p>
+                        </div>
+                        <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${planStatus === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                            {planStatus}
+                        </span>
+                    </div>
+                    
+                    {/* Pricing Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <button 
+                            onClick={() => handleUpgrade('Startup', 499)}
+                            disabled={loading || planStatus === 'active'}
+                            className={`p-5 border rounded-xl transition-all text-left group relative overflow-hidden ${planStatus === 'active' ? 'border-gray-200 opacity-50 cursor-not-allowed' : 'border-indigo-200 hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10'}`}
+                        >
+                            <div className="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">RECOMMENDED</div>
+                            <p className="font-bold text-indigo-600 mb-1">Startup Plan</p>
+                            <div className="flex items-baseline gap-1">
+                                <p className="text-3xl font-bold text-gray-900 dark:text-white">R499</p>
+                                <span className="text-xs text-gray-500">/mo</span>
+                            </div>
+                            <ul className="mt-3 space-y-1">
+                                <li className="text-xs text-gray-500 flex items-center gap-2"><CheckCircle2 size={12} className="text-green-500"/> 1M Events</li>
+                                <li className="text-xs text-gray-500 flex items-center gap-2"><CheckCircle2 size={12} className="text-green-500"/> Priority Support</li>
+                            </ul>
+                        </button>
+                        
+                        <button 
+                            onClick={() => handleUpgrade('Enterprise', 1999)}
+                            disabled={loading}
+                            className="p-5 border border-gray-200 dark:border-slate-600 rounded-xl hover:border-slate-400 dark:hover:border-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-all text-left"
+                        >
+                            <p className="font-bold text-slate-600 dark:text-slate-400 mb-1">Enterprise Plan</p>
+                            <div className="flex items-baseline gap-1">
+                                <p className="text-3xl font-bold text-gray-900 dark:text-white">R1999</p>
+                                <span className="text-xs text-gray-500">/mo</span>
+                            </div>
+                            <ul className="mt-3 space-y-1">
+                                <li className="text-xs text-gray-500 flex items-center gap-2"><CheckCircle2 size={12} className="text-green-500"/> Unlimited Events</li>
+                                <li className="text-xs text-gray-500 flex items-center gap-2"><CheckCircle2 size={12} className="text-green-500"/> Dedicated Server</li>
+                            </ul>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* 3. NOTIFICATIONS */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
                     <Bell size={20} className="text-indigo-600 dark:text-indigo-400" />
@@ -183,87 +322,10 @@ export default function SettingsPage() {
                             <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${notifySecurity ? 'left-7' : 'left-1'}`}></div>
                         </button>
                     </div>
-                    <div className="flex justify-end pt-2">
-                        <button onClick={saveNotifications} className="text-indigo-600 dark:text-indigo-400 font-bold text-sm hover:underline">Save Preferences</button>
-                    </div>
                 </div>
             </div>
 
-            {/* 3. BILLING & PAYMENT */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
-                    <CreditCard size={20} className="text-indigo-600 dark:text-indigo-400" />
-                    <h2 className="font-semibold text-gray-900 dark:text-white">Payment Method</h2>
-                </div>
-                <div className="p-6">
-                    <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-600 rounded-xl mb-4 bg-gray-50 dark:bg-slate-900/50">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-8 bg-slate-800 rounded flex items-center justify-center text-white text-xs font-bold">VISA</div>
-                            <div>
-                                <p className="font-mono text-sm text-gray-900 dark:text-white">•••• •••• •••• 4242</p>
-                                <p className="text-xs text-gray-500">Expires 12/25</p>
-                            </div>
-                        </div>
-                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded uppercase">Default</span>
-                    </div>
-                    <button className="text-sm font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-2 hover:underline">
-                        <Plus size={16}/> Add New Card
-                    </button>
-                </div>
-            </div>
-
-            {/* 4. TEAM MEMBERS */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Users size={20} className="text-indigo-600 dark:text-indigo-400" />
-                        <h2 className="font-semibold text-gray-900 dark:text-white">Team Members</h2>
-                    </div>
-                    <button onClick={addTeamMember} className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:opacity-80"><Plus size={18}/></button>
-                </div>
-                <div className="p-6">
-                    <div className="space-y-4">
-                        {teamMembers.map(member => (
-                            <div key={member.id} className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-slate-700 last:border-0 last:pb-0">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300">
-                                        {member.email.charAt(0).toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-900 dark:text-white">{member.email}</p>
-                                        <p className="text-xs text-gray-500">{member.role}</p>
-                                    </div>
-                                </div>
-                                {member.role !== 'Owner' && (
-                                    <button onClick={() => removeMember(member.id)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded"><Trash2 size={16}/></button>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* 5. WEBHOOKS */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
-                    <Webhook size={20} className="text-indigo-600 dark:text-indigo-400" />
-                    <h2 className="font-semibold text-gray-900 dark:text-white">Webhooks</h2>
-                </div>
-                <div className="p-6">
-                    <p className="text-sm text-gray-500 mb-4">We will send a POST request to this URL when an invoice is generated.</p>
-                    <div className="flex gap-3">
-                        <input 
-                            type="text" 
-                            value={webhookUrl} 
-                            onChange={(e) => setWebhookUrl(e.target.value)}
-                            className="flex-1 p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-sm"
-                        />
-                        <button onClick={saveWebhook} className="bg-slate-900 dark:bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm">Save</button>
-                    </div>
-                </div>
-            </div>
-
-            {/* 6. PASSWORD */}
+            {/* 4. PASSWORD */}
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
                     <Lock size={20} className="text-indigo-600 dark:text-indigo-400" />
