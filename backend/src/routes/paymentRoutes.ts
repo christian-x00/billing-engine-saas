@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { createSubscription, handleITN } from '../controllers/paymentController';
+import { createSubscription, checkPaymentStatus } from '../controllers/paymentController';
 
 const router = Router();
 
 router.post('/subscribe', createSubscription);
-router.post('/itn', handleITN); // Webhook
+router.post('/check-status', checkPaymentStatus);
 
 export default router;
