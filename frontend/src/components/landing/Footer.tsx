@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Globe } from 'lucide-react'
 
-// Reusing the logo locally for the footer to avoid circular imports
+// Reusing the logo locally
 const BrandLogo = () => (
   <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">B</div>
 )
@@ -23,26 +23,27 @@ export default function Footer() {
                     </p>
                 </div>
 
-                {/* Product Links (Scrolls to sections) */}
+                {/* Product Links */}
                 <div>
                     <h4 className="font-bold text-white mb-4">Product</h4>
                     <ul className="space-y-3 text-sm">
-                        <li><a href="#features" className="hover:text-indigo-400 transition-colors">Features</a></li>
-                        <li><a href="#pricing" className="hover:text-indigo-400 transition-colors">Pricing</a></li>
+                        <li><a href="/#features" className="hover:text-indigo-400 transition-colors">Features</a></li>
+                        <li><a href="/#pricing" className="hover:text-indigo-400 transition-colors">Pricing</a></li>
                         <li><Link href="/login" className="hover:text-indigo-400 transition-colors">Login</Link></li>
                     </ul>
                 </div>
 
-                {/* Company Links (Points to your new pages) */}
+                {/* Company Links (FIXED) */}
                 <div>
                     <h4 className="font-bold text-white mb-4">Company</h4>
                     <ul className="space-y-3 text-sm">
                         <li><Link href="/company/about" className="hover:text-indigo-400 transition-colors">About</Link></li>
                         <li><Link href="/company/blog" className="hover:text-indigo-400 transition-colors">Blog</Link></li>
+                        <li><Link href="/company/careers" className="hover:text-indigo-400 transition-colors">Careers</Link></li>
                     </ul>
                 </div>
 
-                {/* Legal Links (Points to your new pages) */}
+                {/* Legal Links (FIXED) */}
                 <div>
                     <h4 className="font-bold text-white mb-4">Legal</h4>
                     <ul className="space-y-3 text-sm">
@@ -57,7 +58,7 @@ export default function Footer() {
             <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center text-sm">
                 <p>&copy; {new Date().getFullYear()} BillingEngine Inc. All rights reserved.</p>
                 <div className="flex gap-6 mt-4 md:mt-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 hover:text-white cursor-pointer transition-colors">
                         <Globe size={16} />
                         <span>English (US)</span>
                     </div>
