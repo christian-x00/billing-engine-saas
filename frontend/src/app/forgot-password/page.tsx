@@ -12,6 +12,7 @@ export default function ForgotPassword() {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setMsg('')
     
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/settings`,
@@ -23,27 +24,45 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4 font-sans text-gray-900">
       <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Reset Password</h1>
-        <p className="text-gray-500 mb-6">Enter your email to receive a recovery link.</p>
+        <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Reset Password</h1>
+            <p className="text-gray-500">Enter your email to receive a recovery link.</p>
+        </div>
         
-        <form onSubmit={handleReset} className="space-y-4">
-            <input 
-                type="email" 
-                value={email} 
-                onChange={e=>setEmail(e.target.value)}
-                placeholder="name@company.com"
-                className="w-full p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none"
-                required
-            />
-            {msg && <p className="text-sm text-indigo-600">{msg}</p>}
-            <button disabled={loading} className="w-full bg-indigo-600 text-white p-3 rounded-lg font-bold hover:bg-indigo-500">
-                {loading ? 'Sending...' : 'Send Reset Link'}
+        <form onSubmit={handleReset} className="space-y-6">
+            <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
+                <input 
+                    type="email" 
+                    value={email} 
+                    onChange={e=>setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    // FIX: Added 'text-gray-900' and 'bg-white' to force visibility
+                    className="w-full p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 bg-white placeholder:text-gray-400"
+                    required
+                />
+            </div>
+
+            {msg && (
+                <div className={`p-3 rounded-lg text-sm font-medium ${msg.includes('Error') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                    {msg}
+                </div>
+            )}
+
+            <button 
+                disabled={loading} 
+                className="w-full bg-indigo-600 text-white p-3 rounded-lg font-bold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-70"
+            >
+                {loading ? 'Sending Link...' : 'Send Reset Link'}
             </button>
         </form>
-        <div className="mt-6 text-center">
-            <Link href="/login" className="text-sm text-gray-500 hover:text-gray-900">Back to Login</Link>
+
+        <div className="mt-8 text-center border-t border-gray-100 pt-6">
+            <Link href="/login" className="text-sm font-bold text-gray-500 hover:text-indigo-600 transition-colors">
+                ← Back to Login
+            </Link>
         </div>
       </div>
     </div>
