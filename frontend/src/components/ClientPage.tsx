@@ -81,7 +81,7 @@ function DashboardComponent() {
         }
     }
 
-    const Snippet = `curl -X POST ${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'}/api/events \\
+    const Snippet = `curl -X POST ${process.env.NEXT_PUBLIC_BACKEND_URL || 'https://billing-engine-kidh.onrender.com'}/api/events \\
   -H "x-api-key: sk_live_..." \\
   -d '{"event": "api_call", "customer_id": "cust_123"}'`
 
