@@ -7,8 +7,10 @@ import { supabase } from '../config/supabase';
 const generateSignature = (data: any, passPhrase: string = '') => {
   let pfOutput = '';
   for (let key in data) {
-    if (data.hasOwnProperty(key) && data[key] !== '') {
-      pfOutput += `${key}=${encodeURIComponent(data[key].trim()).replace(/%20/g, '+')}&`;
+    if (data.hasOwnProperty(key) && data[key] !== undefined && data[key] !== null && data[key] !== '') {
+      // FIX: Convert value to string explicitly before trimming
+      const value = String(data[key]).trim();
+      pfOutput += `${key}=${encodeURIComponent(value).replace(/%20/g, '+')}&`;
     }
   }
   let getString = pfOutput.slice(0, -1);
