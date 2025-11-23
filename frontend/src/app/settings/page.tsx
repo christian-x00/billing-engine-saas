@@ -2,7 +2,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
-import { User, Lock, Camera, Bell, CreditCard, CheckCircle2 } from 'lucide-react'
+import { User, Lock, Camera, CreditCard, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSearchParams, useRouter } from 'next/navigation'
 
@@ -14,9 +14,9 @@ function SettingsContent() {
   const [avatarUrl, setAvatarUrl] = useState('')
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [planStatus, setPlanStatus] = useState('free')
-  const [notifyInvoices, setNotifyInvoices] = useState(true)
-  const [notifySecurity, setNotifySecurity] = useState(true)
+  
+  const [planName, setPlanName] = useState('Free')
+  const [planStatus, setPlanStatus] = useState('inactive')
 
   const supabase = createClient()
   const searchParams = useSearchParams()
@@ -28,22 +28,21 @@ function SettingsContent() {
       if(user) {
         setUser(user)
         setEmail(user.email || '')
-        
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, avatar_url, tenant_id')
-            .eq('id', user.id)
-            .single()
-            
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
         if (profile) {
           setFullName(profile.full_name || '')
           setAvatarUrl(profile.avatar_url || '')
           
-          const { data: tenant } = await supabase.from('tenants').select('subscription_status').eq('id', profile.tenant_id).single()
-          if (tenant) setPlanStatus(tenant.subscription_status || 'free')
-          
+          // Get Real Plan Status
+          const { data: tenant } = await supabase.from('tenants').select('*').eq('id', profile.tenant_id).single()
+          if (tenant) {
+              setPlanName(tenant.subscription_plan || 'Free')
+              setPlanStatus(tenant.subscription_status || 'inactive')
+          }
+
+          // Handle Payment Return
           if (searchParams.get('success') === 'true') {
-             verifyPayment(profile.tenant_id)
+             verifyPayment(profile.tenant_id, searchParams.get('plan') || 'Standard')
           }
         }
       }
@@ -51,190 +50,138 @@ function SettingsContent() {
     init()
   }, [searchParams])
 
-  const verifyPayment = async (tId: string) => {
+  const verifyPayment = async (tId: string, plan: string) => {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
-      try {
-          await fetch(`${backendUrl}/api/payments/check-status`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ tenantId: tId })
-          })
-          toast.success('Subscription Activated Successfully!')
-          setPlanStatus('active')
-          router.replace('/settings')
-      } catch(e) {
-          console.error(e)
-      }
+      await fetch(`${backendUrl}/api/payments/check-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenantId: tId, planName: plan })
+      })
+      toast.success('Subscription Activated!')
+      router.replace('/settings')
+      // Force reload to update UI
+      setTimeout(() => window.location.reload(), 1000)
   }
 
   const updateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     try {
-      if (email !== user.email) {
-        await supabase.auth.updateUser({ email: email })
-        toast.success('Confirmation email sent.')
-      }
-      const { error } = await supabase.from('profiles').update({ full_name: fullName, avatar_url: avatarUrl }).eq('id', user.id)
-      if (error) throw error
-      toast.success('Profile updated.')
-      window.dispatchEvent(new Event('profile-updated'))
-    } catch (error: any) {
-      toast.error(error.message)
-    }
+        if(email !== user.email) await supabase.auth.updateUser({email})
+        await supabase.from('profiles').update({ full_name: fullName, avatar_url: avatarUrl }).eq('id', user.id)
+        toast.success('Profile updated')
+        window.dispatchEvent(new Event('profile-updated'))
+    } catch(e:any) { toast.error(e.message) }
     setLoading(false)
   }
 
-  const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
-      setUploading(true)
-      if (!event.target.files?.length) throw new Error('Select an image.')
-      const file = event.target.files[0]
-      if (file.size > 2097152) throw new Error('Max 2MB.')
-      
-      const fileExt = file.name.split('.').pop()
-      const fileName = `avatar-${Date.now()}.${fileExt}`
-      const filePath = `${user.id}/${fileName}`
-
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file, { upsert: true })
-      if (uploadError) throw uploadError
-
-      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
-      setAvatarUrl(data.publicUrl)
-      toast.success('Avatar uploaded! Save changes.')
-    } catch (error: any) {
-      toast.error(error.message)
-    } finally {
-      setUploading(false)
-    }
+        if(!e.target.files?.length) return
+        setUploading(true)
+        const file = e.target.files[0]
+        const path = `${user.id}/${Date.now()}.${file.name.split('.').pop()}`
+        await supabase.storage.from('avatars').upload(path, file, {upsert:true})
+        const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+        setAvatarUrl(data.publicUrl)
+        toast.success('Image uploaded. Save to apply.')
+    } catch(e:any) { toast.error('Upload failed') }
+    setUploading(false)
   }
 
   const updatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    const { error } = await supabase.auth.updateUser({ password: password })
-    if (error) toast.error(error.message)
-    else {
-      toast.success('Password updated.')
-      setPassword('')
-    }
-    setLoading(false)
+    const { error } = await supabase.auth.updateUser({ password })
+    if(error) toast.error(error.message)
+    else { toast.success('Password changed'); setPassword('') }
   }
 
-  const handleUpgrade = async (planName: string, amount: number) => {
+  const handleUpgrade = async (plan: string) => {
     setLoading(true)
     try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
         const { data: profile } = await supabase.from('profiles').select('tenant_id, email').eq('id', user.id).single()
-        
-        if (!profile) throw new Error('Profile not found')
-        
         const res = await fetch(`${backendUrl}/api/payments/subscribe`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                tenantId: profile.tenant_id,
-                email: profile.email,
-                amount: amount,
-                planName: planName
-            })
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ tenantId: profile.tenant_id, email: profile.email, planName: plan })
         })
         const data = await res.json()
         if(data.url) window.location.href = data.url
-        else throw new Error('Invalid response')
-    } catch(err: any) {
-        toast.error('Payment failed: ' + err.message)
-    }
+    } catch(e) { toast.error('Payment failed') }
     setLoading(false)
   }
 
   return (
     <DashboardLayout>
         <div className="max-w-3xl mx-auto space-y-8 pb-20">
-            <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Settings</h1>
-                <p className="text-gray-500 dark:text-gray-400">Manage account & billing.</p>
-            </div>
+            <h1 className="text-3xl font-bold dark:text-white">Account Settings</h1>
 
             {/* PROFILE */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
-                    <User size={20} className="text-indigo-600 dark:text-indigo-400" />
-                    <h2 className="font-semibold text-gray-900 dark:text-white">Public Profile</h2>
-                </div>
-                <form onSubmit={updateProfile} className="p-6 space-y-6">
-                    <div className="flex items-center gap-6">
-                        <div className="relative group">
-                            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold overflow-hidden border-4 border-white dark:border-slate-800 shadow-lg">
-                                {avatarUrl ? <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : fullName?.charAt(0)?.toUpperCase() || 'U'}
-                            </div>
-                            <label className="absolute bottom-0 right-0 bg-indigo-600 p-2 rounded-full cursor-pointer hover:bg-indigo-500 transition-colors shadow-lg">
-                                <Camera size={16} className="text-white"/>
-                                <input type="file" accept="image/*" className="hidden" onChange={uploadAvatar} disabled={uploading} />
-                            </label>
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
+                <h2 className="font-bold mb-6 dark:text-white flex gap-2"><User/> Public Profile</h2>
+                <form onSubmit={updateProfile} className="space-y-6">
+                    <div className="flex items-center gap-4">
+                        <div className="w-20 h-20 rounded-full bg-indigo-600 flex items-center justify-center text-white text-2xl overflow-hidden">
+                            {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover"/> : fullName[0]}
                         </div>
-                        <div>
-                            <h3 className="font-bold text-gray-900 dark:text-white">{fullName || 'Your Name'}</h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">JPG, PNG or GIF. Max 2MB.</p>
-                        </div>
+                        <label className="bg-gray-100 dark:bg-slate-700 px-4 py-2 rounded-lg cursor-pointer hover:bg-gray-200 dark:text-white">
+                            <input type="file" hidden onChange={uploadAvatar} disabled={uploading}/>
+                            {uploading ? 'Uploading...' : 'Change Photo'}
+                        </label>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
-                            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-                            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
-                        </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <input value={fullName} onChange={e=>setFullName(e.target.value)} className="p-3 border rounded-lg dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="Full Name"/>
+                        <input value={email} onChange={e=>setEmail(e.target.value)} className="p-3 border rounded-lg dark:bg-slate-900 dark:border-slate-600 dark:text-white" placeholder="Email"/>
                     </div>
-                    <div className="flex justify-end">
-                        <button disabled={loading} type="submit" className="bg-gray-900 dark:bg-indigo-600 text-white px-6 py-3 rounded-lg hover:opacity-90 disabled:opacity-50 text-sm font-bold">Save Changes</button>
-                    </div>
+                    <button disabled={loading} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700">Save Profile</button>
                 </form>
             </div>
 
             {/* SUBSCRIPTION */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
-                    <CreditCard size={20} className="text-indigo-600 dark:text-indigo-400" />
-                    <h2 className="font-semibold text-gray-900 dark:text-white">Subscription</h2>
-                </div>
-                <div className="p-6 space-y-6">
-                    <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50 dark:bg-slate-900/50">
-                        <div>
-                            <p className="font-bold text-gray-900 dark:text-white capitalize">Plan: {planStatus}</p>
-                            <p className="text-xs text-gray-500">{planStatus === 'active' ? 'Unlimited access.' : 'Limited to 10k events.'}</p>
-                        </div>
-                        <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${planStatus === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>{planStatus}</span>
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
+                <h2 className="font-bold mb-6 dark:text-white flex gap-2"><CreditCard/> Subscription</h2>
+                
+                <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-900 p-4 rounded-xl mb-6 border dark:border-slate-700">
+                    <div>
+                        <p className="font-bold dark:text-white text-lg">{planName} Plan</p>
+                        <p className="text-sm text-gray-500">{planStatus === 'active' ? 'Next billing in 29 days.' : 'Upgrade to unlock features.'}</p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <button onClick={() => handleUpgrade('Startup', 499)} disabled={loading || planStatus === 'active'} className={`p-5 border rounded-xl text-left group relative overflow-hidden ${planStatus === 'active' ? 'border-gray-200 opacity-50' : 'border-indigo-200 hover:border-indigo-500 hover:bg-indigo-50/50'}`}>
-                            <p className="font-bold text-indigo-600 mb-1">Startup Plan</p>
-                            <div className="flex items-baseline gap-1"><p className="text-3xl font-bold text-gray-900 dark:text-white">R499</p><span className="text-xs text-gray-500">/mo</span></div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${planStatus === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>{planStatus}</span>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                    {/* STANDARD */}
+                    <div className={`p-5 border rounded-xl ${planName === 'Standard' ? 'border-green-500 bg-green-50/10' : 'dark:border-slate-600'}`}>
+                        <div className="flex justify-between mb-2"><span className="font-bold text-indigo-600">Standard</span><span className="font-bold text-xl dark:text-white">$100/mo</span></div>
+                        <ul className="text-sm text-gray-500 space-y-1 mb-4">
+                            <li className="flex gap-2"><CheckCircle2 size={14}/> 1M Events</li>
+                            <li className="flex gap-2"><CheckCircle2 size={14}/> Email Support</li>
+                        </ul>
+                        <button onClick={()=>handleUpgrade('Standard')} disabled={planName==='Standard'} className="w-full py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50 hover:bg-indigo-700">
+                            {planName==='Standard' ? 'Current Plan' : 'Upgrade'}
                         </button>
-                        <button onClick={() => handleUpgrade('Enterprise', 1999)} disabled={loading} className="p-5 border border-gray-200 dark:border-slate-600 rounded-xl hover:border-slate-400 hover:bg-gray-50 dark:hover:bg-slate-700/50 text-left">
-                            <p className="font-bold text-slate-600 dark:text-slate-400 mb-1">Enterprise</p>
-                            <div className="flex items-baseline gap-1"><p className="text-3xl font-bold text-gray-900 dark:text-white">R1999</p><span className="text-xs text-gray-500">/mo</span></div>
+                    </div>
+
+                    {/* ENTERPRISE */}
+                    <div className={`p-5 border rounded-xl ${planName === 'Enterprise' ? 'border-green-500 bg-green-50/10' : 'dark:border-slate-600'}`}>
+                        <div className="flex justify-between mb-2"><span className="font-bold text-indigo-600">Enterprise</span><span className="font-bold text-xl dark:text-white">$300/mo</span></div>
+                        <ul className="text-sm text-gray-500 space-y-1 mb-4">
+                            <li className="flex gap-2"><CheckCircle2 size={14}/> Unlimited Events</li>
+                            <li className="flex gap-2"><CheckCircle2 size={14}/> Dedicated Server</li>
+                        </ul>
+                        <button onClick={()=>handleUpgrade('Enterprise')} disabled={planName==='Enterprise'} className="w-full py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50 hover:bg-indigo-700">
+                            {planName==='Enterprise' ? 'Current Plan' : 'Upgrade'}
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* PASSWORD */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center gap-2">
-                    <Lock size={20} className="text-indigo-600 dark:text-indigo-400" />
-                    <h2 className="font-semibold text-gray-900 dark:text-white">Security</h2>
-                </div>
-                <form onSubmit={updatePassword} className="p-6 space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New Password</label>
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" minLength={6} className="w-full p-3 rounded-lg border border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    </div>
-                    <div className="flex justify-end">
-                        <button disabled={loading || !password} type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-500 disabled:opacity-50 text-sm font-bold">Update Password</button>
-                    </div>
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
+                <h2 className="font-bold mb-6 dark:text-white flex gap-2"><Lock/> Security</h2>
+                <form onSubmit={updatePassword} className="flex gap-4">
+                    <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="New Password" className="flex-1 p-3 border rounded-lg dark:bg-slate-900 dark:border-slate-600 dark:text-white"/>
+                    <button disabled={!password} className="bg-indigo-600 text-white px-6 rounded-lg font-bold hover:bg-indigo-700">Update</button>
                 </form>
             </div>
         </div>
@@ -243,9 +190,5 @@ function SettingsContent() {
 }
 
 export default function Settings() {
-  return (
-    <Suspense fallback={<div className="p-10 text-center">Loading...</div>}>
-      <SettingsContent />
-    </Suspense>
-  )
+  return <Suspense fallback={<div>Loading...</div>}><SettingsContent/></Suspense>
 }
