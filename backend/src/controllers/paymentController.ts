@@ -1,88 +1,114 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import axios from 'axios';
 import { supabase } from '../config/supabase';
 
-// Helper to generate signature
+// Helper to generate signature (Strict PayFast compliance)
 const generateSignature = (data: any, passPhrase: string = '') => {
   let pfOutput = '';
+  
   for (let key in data) {
+    // Skip signature if it's already in the object to prevent recursion
+    if(key === 'signature') continue;
+
     if (data.hasOwnProperty(key) && data[key] !== undefined && data[key] !== null && data[key] !== '') {
-      // FIX: Convert value to string explicitly before trimming
-      const value = String(data[key]).trim();
-      pfOutput += `${key}=${encodeURIComponent(value).replace(/%20/g, '+')}&`;
+      // Convert to string and trim
+      const val = String(data[key]).trim();
+      // Use encodeURIComponent but replace spaces with + (PayFast requirement)
+      pfOutput += `${key}=${encodeURIComponent(val).replace(/%20/g, '+')}&`;
     }
   }
+
+  // Remove last ampersand
   let getString = pfOutput.slice(0, -1);
+
   if (passPhrase) {
     getString += `&passphrase=${encodeURIComponent(passPhrase.trim()).replace(/%20/g, '+')}`;
   }
+
+  console.log('Signature String:', getString); // Debug Log
+
   return crypto.createHash('md5').update(getString).digest('hex');
 };
 
 export const createSubscription = async (req: Request, res: Response) => {
-  const { tenantId, email, amount, planName } = req.body;
-
-  // 1. Prepare PayFast Data
-  const data: any = {
-    merchant_id: process.env.PAYFAST_MERCHANT_ID,
-    merchant_key: process.env.PAYFAST_MERCHANT_KEY,
-    return_url: `${process.env.FRONTEND_URL}/settings?success=true`,
-    cancel_url: `${process.env.FRONTEND_URL}/settings?cancel=true`,
-    notify_url: `${process.env.BACKEND_URL}/api/payments/itn`,
+  try {
+    console.log('--- Starting Payment Initialization ---');
+    const { tenantId, email, amount, planName } = req.body;
     
-    // Buyer Details
-    name_first: 'Client',
-    email_address: email,
-    
-    // Transaction Details
-    m_payment_id: tenantId, // Use Tenant ID to track who paid
-    amount: amount.toFixed(2),
-    item_name: `Subscription: ${planName}`,
-    
-    // Subscription (Recurring)
-    subscription_type: 1, // 1 = Subscription
-    billing_date: new Date().toISOString().split('T')[0], // Start today
-    recurring_amount: amount.toFixed(2),
-    frequency: 3, // 3 = Monthly
-    cycles: 0 // 0 = Indefinite
-  };
+    // Check credentials
+    if (!process.env.PAYFAST_MERCHANT_ID || !process.env.PAYFAST_MERCHANT_KEY) {
+      throw new Error('PayFast credentials missing in Backend Environment Variables');
+    }
 
-  // 2. Sign Data
-  data.signature = generateSignature(data, process.env.PAYFAST_PASSPHRASE);
+    // Ensure amount is formatted correctly (e.g., "100.00")
+    const amountStr = Number(amount).toFixed(2);
 
-  // 3. Return URL to Frontend (Client will redirect there)
-  const queryString = Object.keys(data).map(key => key + '=' + data[key]).join('&');
-  const redirectUrl = `${process.env.PAYFAST_URL}?${queryString}`;
+    // 1. Prepare PayFast Data
+    // IMPORTANT: All values should be strings/numbers. No nested objects.
+    const data: any = {
+      merchant_id: process.env.PAYFAST_MERCHANT_ID,
+      merchant_key: process.env.PAYFAST_MERCHANT_KEY,
+      return_url: `${process.env.FRONTEND_URL}/settings?success=true`,
+      cancel_url: `${process.env.FRONTEND_URL}/settings?cancel=true`,
+      notify_url: `${process.env.BACKEND_URL}/api/payments/itn`,
+      
+      name_first: 'Client',
+      email_address: email,
+      m_payment_id: tenantId,
+      amount: amountStr,
+      item_name: `Subscription: ${planName}`,
+      
+      // Subscription Fields (Send as strings to be safe)
+      subscription_type: '1', // 1 = Subscription
+      billing_date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+      recurring_amount: amountStr,
+      frequency: '3', // 3 = Monthly
+      cycles: '0'     // 0 = Indefinite
+    };
 
-  res.json({ url: redirectUrl });
+    // 2. Sign Data
+    if (process.env.PAYFAST_PASSPHRASE) {
+        data.signature = generateSignature(data, process.env.PAYFAST_PASSPHRASE);
+    } else {
+        data.signature = generateSignature(data);
+    }
+
+    console.log('Final Data Payload:', data);
+
+    // 3. Return URL
+    const queryString = Object.keys(data).map(key => key + '=' + data[key]).join('&');
+    const redirectUrl = `${process.env.PAYFAST_URL}?${queryString}`;
+
+    res.json({ url: redirectUrl });
+
+  } catch (error: any) {
+    console.error('PAYMENT CRASH:', error.message);
+    res.status(500).json({ error: 'Payment Init Failed', details: error.message });
+  }
 };
 
 export const handleITN = async (req: Request, res: Response) => {
   // PayFast calls this webhook to confirm payment
-  const pfData = req.body;
+  // In production, verify the signature here!
   
-  // 1. Validate Signature (Security Check)
-  // In production, you MUST verify signature and IP source. 
-  // For MVP, we assume valid if status is COMPLETE.
+  const pfData = req.body;
+  console.log('ITN Received:', pfData);
 
   if(pfData.payment_status === 'COMPLETE') {
       const tenantId = pfData.m_payment_id;
-      const pfPaymentId = pfData.pf_payment_id;
 
-      // 2. Update Database: Set Tenant to ACTIVE
-      // We assume you have a 'subscription_status' column in 'tenants' table
+      // Update Database
       await supabase
         .from('tenants')
         .update({ 
             subscription_status: 'active',
             subscription_plan: pfData.item_name,
-            payfast_token: pfData.token // Save token for future charges
+            payfast_token: pfData.token
         })
         .eq('id', tenantId);
       
-      console.log(`Payment Success for Tenant ${tenantId}`);
+      console.log(`Subscription Activated for Tenant ${tenantId}`);
   }
 
-  res.status(200).send(); // Always return 200 to PayFast
+  res.status(200).send();
 };
