@@ -53,8 +53,8 @@ export default function InvoicesPage() {
             </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
-          <table className="w-full text-sm text-left">
+<div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <table className="w-full text-sm text-left">
             <thead className="text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
               <tr>
                 <th className="px-6 py-3 font-medium">Customer</th>

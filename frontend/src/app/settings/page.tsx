@@ -134,8 +134,8 @@ function SettingsContent() {
             <h1 className="text-3xl font-bold dark:text-white">Account Settings</h1>
 
             {/* PROFILE */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                <h2 className="font-bold mb-6 dark:text-white flex gap-2"><User/> Public Profile</h2>
+<div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">              
+      <h2 className="font-bold mb-6 dark:text-white flex gap-2"><User/> Public Profile</h2>
                 <form onSubmit={updateProfile} className="space-y-6">
                     <div className="flex items-center gap-4">
                         <div className="w-20 h-20 rounded-full bg-indigo-600 flex items-center justify-center text-white text-2xl overflow-hidden">
@@ -155,8 +155,8 @@ function SettingsContent() {
             </div>
 
             {/* SUBSCRIPTION */}
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700">
-                <h2 className="font-bold mb-6 dark:text-white flex gap-2"><CreditCard/> Subscription</h2>
+<div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <h2 className="font-bold mb-6 dark:text-white flex gap-2"><CreditCard/> Subscription</h2>
                 
                 <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-900 p-4 rounded-xl mb-6 border dark:border-slate-700">
                     <div>

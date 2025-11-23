@@ -119,10 +119,10 @@ const revokeKey = async (id: string) => {
         )}
 
         {/* Keys Table */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
-              <tr>
+<div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <table className="w-full text-sm text-left">
+<thead className="text-gray-500 bg-gray-50 border-b border-gray-100">
+                <tr>
                 <th className="px-6 py-3 font-medium">Key Prefix</th>
                 <th className="px-6 py-3 font-medium">Created</th>
                 <th className="px-6 py-3 font-medium text-right">Action</th>
