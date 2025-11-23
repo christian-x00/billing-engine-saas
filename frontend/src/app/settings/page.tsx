@@ -96,18 +96,35 @@ function SettingsContent() {
     else { toast.success('Password changed'); setPassword('') }
   }
 
-  const handleUpgrade = async (plan: string) => {
+   const handleUpgrade = async (plan: string) => {
     setLoading(true)
     try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://billing-engine-kidh.onrender.com'
+        
         const { data: profile } = await supabase.from('profiles').select('tenant_id, email').eq('id', user.id).single()
+        
+        // --- THIS IS THE FIX ---
+        if (!profile) {
+            throw new Error('Profile not found')
+        }
+        // -----------------------
+
         const res = await fetch(`${backendUrl}/api/payments/subscribe`, {
-            method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ tenantId: profile.tenant_id, email: profile.email, planName: plan })
+            method: 'POST', 
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ 
+                tenantId: profile.tenant_id, // Now safe
+                email: profile.email, 
+                planName: plan,
+                amount: plan === 'Standard' ? 100 : 300 // Explicit amount
+            })
         })
         const data = await res.json()
         if(data.url) window.location.href = data.url
-    } catch(e) { toast.error('Payment failed') }
+        else throw new Error('Payment init failed')
+    } catch(e: any) { 
+        toast.error(e.message) 
+    }
     setLoading(false)
   }
 
