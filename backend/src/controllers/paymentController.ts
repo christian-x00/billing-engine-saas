@@ -50,7 +50,7 @@ export const createSubscription = async (req: Request, res: Response) => {
       merchant_key: process.env.PAYFAST_MERCHANT_KEY,
       return_url: `${process.env.FRONTEND_URL}/settings?success=true`,
       cancel_url: `${process.env.FRONTEND_URL}/settings?cancel=true`,
-     // notify_url: `${process.env.BACKEND_URL}/api/payments/itn`,
+notify_url: 'https://www.google.com', // Test if this passes validation
       
       name_first: 'Client',
       email_address: email,
