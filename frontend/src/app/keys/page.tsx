@@ -62,46 +62,46 @@ export default function ApiKeysPage() {
       <div className="max-w-5xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
             <div>
-                <h1 className="text-2xl font-bold text-slate-900">API Keys</h1>
-                <p className="text-slate-500">Manage secret keys for your backend integration.</p>
+                <h1 className="text-2xl font-bold text-white">API Keys</h1>
+                <p className="text-slate-400">Manage secret keys for your backend integration.</p>
             </div>
-            <button onClick={generateKey} disabled={loading || !tenantId} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors text-sm font-medium shadow-sm">
+            <button onClick={generateKey} disabled={loading || !tenantId} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 disabled:opacity-50 transition-colors text-sm font-medium shadow-sm">
                 {loading ? 'Generating...' : <><Plus size={18}/> Generate Secret Key</>}
             </button>
         </div>
 
         {newKey && (
-        <div className="bg-green-50 border border-green-200 p-6 rounded-xl shadow-sm">
-            <h3 className="text-green-800 font-bold mb-1">New Key Generated</h3>
-            <p className="text-sm text-green-700 mb-4">Copy this key now. It will not be shown again.</p>
+        <div className="bg-green-900/20 border border-green-800 p-6 rounded-xl shadow-sm">
+            <h3 className="text-green-400 font-bold mb-1">New Key Generated</h3>
+            <p className="text-sm text-green-300 mb-4">Copy this key now. It will not be shown again.</p>
             <div className="flex items-center gap-2">
-            <code className="flex-1 bg-white p-3 rounded-lg border border-green-300 font-mono text-lg text-slate-800 break-all">{newKey}</code>
-            <button onClick={() => {navigator.clipboard.writeText(newKey); setCopied(true); setTimeout(()=>setCopied(false), 2000)}} className="bg-green-200 hover:bg-green-300 text-green-900 px-4 py-3 rounded-lg font-bold transition-colors">
+            <code className="flex-1 bg-slate-900 p-3 rounded-lg border border-green-800 font-mono text-lg text-green-400 break-all">{newKey}</code>
+            <button onClick={() => {navigator.clipboard.writeText(newKey); setCopied(true); setTimeout(()=>setCopied(false), 2000)}} className="bg-green-800 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-bold transition-colors">
                 {copied ? <Check size={20}/> : <Copy size={20}/>}
             </button>
             </div>
-            <button onClick={() => setNewKey(null)} className="mt-4 text-sm text-green-700 underline hover:no-underline">I have saved it</button>
+            <button onClick={() => setNewKey(null)} className="mt-4 text-sm text-green-400 underline hover:no-underline">I have saved it</button>
         </div>
         )}
 
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="text-slate-500 bg-slate-50 border-b border-slate-200">
+        <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-sm overflow-hidden">
+          <table className="w-full text-sm text-left text-slate-300">
+            <thead className="text-slate-400 bg-slate-900/50 border-b border-slate-700">
               <tr>
                 <th className="px-6 py-3 font-medium">Key Prefix</th>
                 <th className="px-6 py-3 font-medium">Created</th>
                 <th className="px-6 py-3 font-medium text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-700">
               {keys.length === 0 ? (
-                  <tr><td colSpan={3} className="px-6 py-12 text-center text-slate-400">No API keys found.</td></tr>
+                  <tr><td colSpan={3} className="px-6 py-12 text-center text-slate-500">No API keys found.</td></tr>
               ) : keys.map((key) => (
-                <tr key={key.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4"><span className="font-mono text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded">{key.prefix}...</span></td>
-                  <td className="px-6 py-4 text-slate-500">{new Date(key.created_at).toLocaleDateString()}</td>
+                <tr key={key.id} className="hover:bg-slate-700/50 transition-colors">
+                  <td className="px-6 py-4"><span className="font-mono text-xs text-slate-300 bg-slate-900 px-2 py-1 rounded border border-slate-700">{key.prefix}...</span></td>
+                  <td className="px-6 py-4 text-slate-400">{new Date(key.created_at).toLocaleDateString()}</td>
                   <td className="px-6 py-4 text-right">
-                    <button onClick={() => revokeKey(key.id)} className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors" title="Revoke"><Trash2 size={18} /></button>
+                    <button onClick={() => revokeKey(key.id)} className="text-red-400 hover:bg-red-900/20 p-2 rounded-lg transition-colors" title="Revoke"><Trash2 size={18} /></button>
                   </td>
                 </tr>
               ))}
