@@ -36,61 +36,46 @@ export const createSubscription = async (req: Request, res: Response) => {
   try {
     const { tenantId, email, amount, planName } = req.body;
     
-    // Check for credentials
     if (!process.env.PAYFAST_MERCHANT_ID || !process.env.PAYFAST_MERCHANT_KEY) {
       throw new Error('PayFast credentials missing in Backend');
     }
 
-    // Ensure amount is a string with 2 decimal places (e.g., "100.00")
     const amountStr = Number(amount).toFixed(2);
 
-    // Calculate Billing Date (Start Tomorrow)
-    // PayFast subscriptions usually require a future start date
+    // --- THE 14-DAY TRIAL LOGIC ---
     const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const billingDate = tomorrow.toISOString().split('T')[0];
+    const trialEnd = new Date(today);
+    trialEnd.setDate(today.getDate() + 14); // Add 14 days
+    const billingDate = trialEnd.toISOString().split('T')[0]; // YYYY-MM-DD
+    // ------------------------------
 
-    // 1. Prepare PayFast Data Object
-    // We use 'any' type to allow dynamic signature generation
     const data: any = {
       merchant_id: process.env.PAYFAST_MERCHANT_ID,
       merchant_key: process.env.PAYFAST_MERCHANT_KEY,
-      
-      // Return URLs
       return_url: `${process.env.FRONTEND_URL}/settings?success=true`,
       cancel_url: `${process.env.FRONTEND_URL}/settings?cancel=true`,
-      // notify_url: removed to prevent Render blocking issues in Sandbox
       
-      // Customer Details
       name_first: 'Client',
       email_address: email,
-      
-      // Transaction Details
-      m_payment_id: tenantId, // We track payment by Tenant ID
+      m_payment_id: tenantId,
       amount: amountStr,
-      item_name: `Subscription: ${planName}`,
+      item_name: `Subscription: ${planName} (14-Day Trial)`, // Updated Name
       
-      // RECURRING BILLING FIELDS
-      subscription_type: '1', // 1 = Subscription
-      billing_date: billingDate, // Start date (YYYY-MM-DD)
-      recurring_amount: amountStr, // Amount to charge monthly
-      frequency: '3', // 3 = Monthly
-      cycles: '0'     // 0 = Indefinite / No Limit
+      subscription_type: '1',
+      billing_date: billingDate, // Charge happens in 2 weeks
+      recurring_amount: amountStr,
+      frequency: '3', // Monthly
+      cycles: '0'
     };
 
-    // 2. Generate Signature
     if (process.env.PAYFAST_PASSPHRASE) {
         data.signature = generateSignature(data, process.env.PAYFAST_PASSPHRASE);
     } else {
         data.signature = generateSignature(data);
     }
 
-    // 3. Build the Redirect Query String
     const queryString = Object.keys(data).map(key => key + '=' + data[key]).join('&');
-    const redirectUrl = `${process.env.PAYFAST_URL}?${queryString}`;
-
-    res.json({ url: redirectUrl });
+    res.json({ url: `${process.env.PAYFAST_URL}?${queryString}` });
 
   } catch (error: any) {
     console.error('PAYMENT ERROR:', error);
