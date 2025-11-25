@@ -86,7 +86,7 @@ function SettingsContent() {
   }, [searchParams])
 
   const verifyPayment = async (tId: string, plan: string) => {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://billing-engine-kidh.onrender.com'
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
       await fetch(`${backendUrl}/api/payments/check-status`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -97,19 +97,13 @@ function SettingsContent() {
       setTimeout(() => window.location.reload(), 1000)
   }
 
-   const handleCancel = async () => {
+  const handleCancel = async () => {
     if(!confirm("Are you sure? You will lose access when the billing period ends.")) return;
     setLoading(true)
     try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
         const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
         
-        // --- FIX START ---
-        if (!profile) {
-            throw new Error('Profile not found')
-        }
-        // --- FIX END ---
-
         await fetch(`${backendUrl}/api/payments/cancel`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -117,11 +111,10 @@ function SettingsContent() {
         })
         toast.success('Subscription canceled.')
         window.location.reload()
-    } catch(e: any) { 
-        toast.error(e.message || 'Cancel failed') 
-    }
+    } catch(e) { toast.error('Cancel failed') }
     setLoading(false)
   }
+
   const updateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)

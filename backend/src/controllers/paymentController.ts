@@ -2,24 +2,36 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { supabase } from '../config/supabase';
 
+// Helper: Generate PayFast Signature using URLSearchParams
+// This ensures encoding matches exactly what the browser sends
 const generateSignature = (data: any, passPhrase: string = '') => {
-  let pfOutput = '';
+  const cleanData: any = {};
+  
+  // 1. Filter valid fields
   for (let key in data) {
-    if(key === 'signature') continue;
-    if (data.hasOwnProperty(key) && data[key] !== undefined && data[key] !== null && data[key] !== '') {
-      const val = String(data[key]).trim();
-      pfOutput += `${key}=${encodeURIComponent(val).replace(/%20/g, '+')}&`;
+    if (key !== 'signature' && data[key] !== undefined && data[key] !== null && data[key] !== '') {
+      cleanData[key] = String(data[key]).trim();
     }
   }
-  let getString = pfOutput.slice(0, -1);
+
+  // 2. Sort keys? PayFast doesn't strictly require alphabetical for MD5, 
+  // but we must ensure we hash the EXACT string that becomes the query params.
+  // URLSearchParams handles the encoding (spaces to +) standard.
+  
+  let queryString = new URLSearchParams(cleanData).toString();
+
+  // 3. Append Passphrase
   if (passPhrase) {
-    getString += `&passphrase=${encodeURIComponent(passPhrase.trim()).replace(/%20/g, '+')}`;
+    queryString += `&passphrase=${encodeURIComponent(passPhrase.trim())}`;
   }
-  return crypto.createHash('md5').update(getString).digest('hex');
+
+  // 4. Hash
+  return crypto.createHash('md5').update(queryString).digest('hex');
 };
 
 export const createSubscription = async (req: Request, res: Response) => {
   try {
+    console.log('--- Starting Payment Initialization ---');
     const { tenantId, email, amount, planName } = req.body;
     
     if (!process.env.PAYFAST_MERCHANT_ID || !process.env.PAYFAST_MERCHANT_KEY) {
@@ -34,6 +46,7 @@ export const createSubscription = async (req: Request, res: Response) => {
     trialEnd.setDate(today.getDate() + 14); 
     const billingDate = trialEnd.toISOString().split('T')[0];
 
+    // 1. Prepare Data
     const data: any = {
       merchant_id: process.env.PAYFAST_MERCHANT_ID,
       merchant_key: process.env.PAYFAST_MERCHANT_KEY,
@@ -53,14 +66,25 @@ export const createSubscription = async (req: Request, res: Response) => {
       cycles: '0'
     };
 
+    // 2. Generate Signature
     if (process.env.PAYFAST_PASSPHRASE) {
         data.signature = generateSignature(data, process.env.PAYFAST_PASSPHRASE);
     } else {
         data.signature = generateSignature(data);
     }
 
-    const queryString = Object.keys(data).map(key => key + '=' + data[key]).join('&');
-    res.json({ url: `${process.env.PAYFAST_URL}?${queryString}` });
+    // 3. Build Final URL (Must use URLSearchParams to match signature encoding)
+    const params = new URLSearchParams();
+    for (let key in data) {
+        if (data[key] !== undefined && data[key] !== null && data[key] !== '') {
+            params.append(key, String(data[key]).trim());
+        }
+    }
+
+    const redirectUrl = `${process.env.PAYFAST_URL}?${params.toString()}`;
+    
+    console.log('Generated Redirect URL:', redirectUrl);
+    res.json({ url: redirectUrl });
 
   } catch (error: any) {
     console.error('PAYMENT ERROR:', error);
@@ -73,8 +97,7 @@ export const checkPaymentStatus = async (req: Request, res: Response) => {
     
     if (!tenantId) return res.status(400).json({ error: 'Tenant ID missing' });
 
-    // Calculate Period End (30 Days + 14 Trial = 44 Days or just 30)
-    // Let's assume 30 days cycle start immediately upon activation for logic simplicity
+    // Calculate Period End (30 Days from now)
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + 30);
 
@@ -98,7 +121,6 @@ export const checkPaymentStatus = async (req: Request, res: Response) => {
 export const cancelSubscription = async (req: Request, res: Response) => {
     const { tenantId } = req.body;
     
-    // Mark as canceled (access remains until period_end)
     const { error } = await supabase
         .from('tenants')
         .update({ subscription_status: 'canceled' })
