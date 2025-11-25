@@ -97,13 +97,19 @@ function SettingsContent() {
       setTimeout(() => window.location.reload(), 1000)
   }
 
-  const handleCancel = async () => {
+    const handleCancel = async () => {
     if(!confirm("Are you sure? You will lose access when the billing period ends.")) return;
     setLoading(true)
     try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
         const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
         
+        // --- THIS IS THE FIX ---
+        if (!profile) {
+            throw new Error('Profile not found')
+        }
+        // -----------------------
+
         await fetch(`${backendUrl}/api/payments/cancel`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -111,7 +117,9 @@ function SettingsContent() {
         })
         toast.success('Subscription canceled.')
         window.location.reload()
-    } catch(e) { toast.error('Cancel failed') }
+    } catch(e: any) { 
+        toast.error(e.message || 'Cancel failed') 
+    }
     setLoading(false)
   }
 
