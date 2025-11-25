@@ -84,32 +84,43 @@ export const createSubscription = async (req: Request, res: Response) => {
 };
 
 export const checkPaymentStatus = async (req: Request, res: Response) => {
-    // This endpoint is called by the Frontend after a successful return
-    const { tenantId } = req.body;
+    const { tenantId, planName } = req.body;
     
     if (!tenantId) return res.status(400).json({ error: 'Tenant ID missing' });
 
-    // Determine plan name based on payment amount or context if needed.
-    // For MVP, we assume "Standard" if not specified, or update generic "Active"
-    // In a real app, you might want to pass the plan name in the query param too.
-    
-    // Update Database to Active
+    // Calculate End Date (30 Days from now)
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 30); 
+
+    // Update Database
     const { error } = await supabase
         .from('tenants')
         .update({ 
             subscription_status: 'active',
-            // We set a generic active status here. 
-            // Ideally, you'd fetch the specific plan from a pending_payments table.
-            subscription_plan: 'Standard (Active)' 
+            subscription_plan: planName || 'Standard',
+            current_period_end: endDate.toISOString() // <--- SAVE END DATE
         })
         .eq('id', tenantId);
 
-    if (error) {
-        console.error('DB Error:', error);
-        return res.status(500).json({ error: 'DB Update Failed' });
-    }
+    if (error) return res.status(500).json({ error: 'DB Update Failed' });
     
-    res.json({ status: 'active', message: 'Subscription activated successfully' });
+    res.json({ status: 'active', message: 'Subscription activated' });
+};
+
+// Add Cancel Endpoint
+export const cancelSubscription = async (req: Request, res: Response) => {
+    const { tenantId } = req.body;
+    
+    // In real life, you call PayFast API to cancel token.
+    // For MVP, we just mark DB as 'canceled' (access remains until period_end)
+    
+    const { error } = await supabase
+        .from('tenants')
+        .update({ subscription_status: 'canceled' })
+        .eq('id', tenantId);
+
+    if (error) return res.status(500).json({ error: 'Cancel Failed' });
+    res.json({ status: 'canceled' });
 };
 
 // ITN Handler (Webhook) - Kept for reference if you fix the URL blocking later
