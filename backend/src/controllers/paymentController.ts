@@ -2,43 +2,40 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { supabase } from '../config/supabase';
 
-// Helper: Generate PayFast Signature using URLSearchParams
-// This ensures encoding matches exactly what the browser sends
+// Helper: Generate PayFast Signature
 const generateSignature = (data: any, passPhrase: string = '') => {
   const cleanData: any = {};
   
-  // 1. Filter valid fields
   for (let key in data) {
     if (key !== 'signature' && data[key] !== undefined && data[key] !== null && data[key] !== '') {
       cleanData[key] = String(data[key]).trim();
     }
   }
 
-  // 2. Sort keys? PayFast doesn't strictly require alphabetical for MD5, 
-  // but we must ensure we hash the EXACT string that becomes the query params.
-  // URLSearchParams handles the encoding (spaces to +) standard.
-  
   let queryString = new URLSearchParams(cleanData).toString();
 
-  // 3. Append Passphrase
   if (passPhrase) {
     queryString += `&passphrase=${encodeURIComponent(passPhrase.trim())}`;
   }
 
-  // 4. Hash
   return crypto.createHash('md5').update(queryString).digest('hex');
 };
 
 export const createSubscription = async (req: Request, res: Response) => {
   try {
     console.log('--- Starting Payment Initialization ---');
-    const { tenantId, email, amount, planName } = req.body;
+    const { tenantId, email, amount, planName } = req.body; // amount is in USD (e.g., 100)
     
     if (!process.env.PAYFAST_MERCHANT_ID || !process.env.PAYFAST_MERCHANT_KEY) {
       throw new Error('PayFast credentials missing in Backend');
     }
 
-    const amountStr = Number(amount).toFixed(2);
+    // --- CURRENCY CONVERSION (USD -> ZAR) ---
+    // PayFast requires ZAR. We assume $1 = R19.00 for this implementation.
+    const EXCHANGE_RATE = 19.00; 
+    const amountZAR = (Number(amount) * EXCHANGE_RATE).toFixed(2);
+    
+    console.log(`Converting $${amount} to R${amountZAR}`);
 
     // 14-Day Trial Logic
     const today = new Date();
@@ -56,12 +53,12 @@ export const createSubscription = async (req: Request, res: Response) => {
       name_first: 'Client',
       email_address: email,
       m_payment_id: tenantId,
-      amount: amountStr,
-      item_name: `Subscription: ${planName} (14-Day Trial)`,
+      amount: amountZAR, // Send ZAR amount
+      item_name: `Subscription: ${planName} ($${amount}/mo)`, // Display USD price in name
       
       subscription_type: '1',
       billing_date: billingDate,
-      recurring_amount: amountStr,
+      recurring_amount: amountZAR, // Recurring in ZAR
       frequency: '3',
       cycles: '0'
     };
@@ -73,7 +70,7 @@ export const createSubscription = async (req: Request, res: Response) => {
         data.signature = generateSignature(data);
     }
 
-    // 3. Build Final URL (Must use URLSearchParams to match signature encoding)
+    // 3. Build Final URL
     const params = new URLSearchParams();
     for (let key in data) {
         if (data[key] !== undefined && data[key] !== null && data[key] !== '') {
@@ -82,8 +79,6 @@ export const createSubscription = async (req: Request, res: Response) => {
     }
 
     const redirectUrl = `${process.env.PAYFAST_URL}?${params.toString()}`;
-    
-    console.log('Generated Redirect URL:', redirectUrl);
     res.json({ url: redirectUrl });
 
   } catch (error: any) {
