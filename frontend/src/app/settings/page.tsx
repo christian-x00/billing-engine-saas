@@ -67,7 +67,7 @@ function SettingsContent() {
           // FIX: Check if tenant exists first
           if (intendedPlan && tenant && tenant.subscription_status !== 'active') { 
               localStorage.removeItem('intendedPlan')
-              triggerPayment(intendedPlan, profile.tenant_id, user.email)
+              triggerPayment(intendedPlan, profile.tenant_id, user.email || '')
           }
         }
       }
