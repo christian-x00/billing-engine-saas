@@ -3,11 +3,14 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import DashboardLayout from '@/components/DashboardLayout'
-import { Activity, CreditCard, TrendingUp, Users, ArrowUpRight, Copy, Check, Terminal, Code } from 'lucide-react'
+import { 
+  Activity, CreditCard, TrendingUp, Users, ArrowUpRight, Copy, Check, 
+  Terminal, Code
+} from 'lucide-react'
 import Link from 'next/link'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
-// Imports for Landing Page
+// --- IMPORT EXTERNAL LANDING COMPONENTS ---
 import Navbar from '@/components/landing/Navbar'
 import Hero from '@/components/landing/Hero'
 import Features from '@/components/landing/Features'
@@ -15,9 +18,10 @@ import Pricing from '@/components/landing/Pricing'
 import Contact from '@/components/landing/Contact'
 import Footer from '@/components/landing/Footer'
 
+// --- 1. LANDING PAGE COMPONENT ---
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-gray-900 font-sans selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden">
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden">
       <Navbar />
       <Hero />
       <Features />
@@ -28,7 +32,7 @@ function LandingPage() {
   )
 }
 
-// --- DASHBOARD COMPONENT (Dark Mode) ---
+// --- 2. DASHBOARD COMPONENT (Logged In) ---
 function DashboardComponent() {
     const [tenantId, setTenantId] = useState<string>('Loading...')
     const [copied, setCopied] = useState(false)
@@ -52,21 +56,65 @@ function DashboardComponent() {
     }, [])
 
     const fetchStats = async (tId: string) => {
-        const { data: usage } = await supabase.from('usage_aggregates').select('usage_count, date')
-        const { data: inv } = await supabase.from('invoices').select('*').eq('tenant_id', tId).order('created_at', {ascending:false})
-        const { count: custCount } = await supabase.from('customers').select('*', { count: 'exact', head: true }).eq('tenant_id', tId)
+        // 1. Fetch Usage (Events) - Ordered for Chart
+        const { data: usage } = await supabase
+            .from('usage_aggregates')
+            .select('usage_count, date')
+            .eq('tenant_id', tId)
+            .order('date', { ascending: true })
 
+        // 2. Fetch Invoices (Revenue)
+        const { data: inv } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('tenant_id', tId)
+            .order('created_at', { ascending: false })
+
+        // 3. Fetch Customers Count
+        const { count: custCount } = await supabase
+            .from('customers')
+            .select('*', { count: 'exact', head: true })
+            .eq('tenant_id', tId)
+
+        // --- CALCULATIONS ---
         const totalEvents = usage?.reduce((a, b) => a + b.usage_count, 0) || 0
-        const revenue = (inv?.filter(i => i.status === 'open').reduce((a,b)=>a+b.total_amount_cents, 0)||0)/100
         
-        setKpi({ events: totalEvents, revenue, customers: custCount || 0 })
+        // Calculate Revenue (Sum of PAID and OPEN invoices, converted to dollars)
+        const revenueCents = inv
+            ?.filter(i => i.status === 'paid' || i.status === 'open')
+            .reduce((a,b)=>a+b.total_amount_cents, 0) || 0
+        
+        setKpi({ 
+            events: totalEvents, 
+            revenue: revenueCents / 100, 
+            customers: custCount || 0 
+        })
+        
         setRecentInvoices(inv?.slice(0,5) || [])
 
-        const rawChart = usage || []
-        if (rawChart.length === 0) {
-            setChartData([{ date: 'Mon', events: 0 }, { date: 'Tue', events: 0 }, { date: 'Wed', events: 0 }, { date: 'Thu', events: 0 }, { date: 'Fri', events: 0 }])
+        // --- CHART DATA PROCESSING ---
+        if (!usage || usage.length === 0) {
+            // Empty State
+            setChartData([
+                { date: 'Mon', events: 0 }, { date: 'Tue', events: 0 }, 
+                { date: 'Wed', events: 0 }, { date: 'Thu', events: 0 }, 
+                { date: 'Fri', events: 0 }
+            ])
         } else {
-            setChartData(rawChart.map(r => ({ date: new Date(r.date).toLocaleDateString(undefined, {weekday:'short'}), events: r.usage_count })))
+            // Group by Date (Sum usage per day)
+            const grouped: any = {}
+            usage.forEach((u: any) => {
+                const d = new Date(u.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                if (!grouped[d]) grouped[d] = 0
+                grouped[d] += u.usage_count
+            })
+            
+            const formattedChart = Object.keys(grouped).map(date => ({
+                date,
+                events: grouped[date]
+            }))
+            
+            setChartData(formattedChart)
         }
     }
 
@@ -207,6 +255,7 @@ function KpiCard({ title, value, icon: Icon, trend, color }: any) {
     )
 }
 
+// --- 3. MAIN CONTROLLER ---
 export default function ClientPage() {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
     const supabase = createClient()
