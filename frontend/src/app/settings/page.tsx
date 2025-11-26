@@ -62,9 +62,10 @@ function SettingsContent() {
              verifyPayment(profile.tenant_id, searchParams.get('plan') || 'Standard')
           }
 
-          // --- AUTO TRIGGER PAYMENT ---
+                    // --- AUTO TRIGGER PAYMENT ---
           const intendedPlan = localStorage.getItem('intendedPlan')
-          if (intendedPlan && tenant.subscription_status !== 'active') {
+          // FIX: Check if tenant exists first
+          if (intendedPlan && tenant && tenant.subscription_status !== 'active') { 
               localStorage.removeItem('intendedPlan')
               triggerPayment(intendedPlan, profile.tenant_id, user.email)
           }
